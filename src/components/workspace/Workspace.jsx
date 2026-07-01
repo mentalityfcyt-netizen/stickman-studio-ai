@@ -4,6 +4,7 @@ import SceneEditor from "./SceneEditor";
 import SceneCanvas from "./SceneCanvas";
 import AIToolbox from "./AIToolbox";
 import { generateImage } from "../../services/imageService";
+import { improveImagePrompt } from "../../services/aiEditService";
 
 function Workspace({
   sections,
@@ -15,8 +16,20 @@ function Workspace({
 }) {
   const hasImage = Boolean(sceneImages[selectedScene]);
 
+  const sceneList = sections?.scenes
+    ? sections.scenes
+        .split(/\n(?=\d+\.|\d+\)|Scene)/)
+        .filter((item) => item.trim() !== "")
+    : [];
+
   const imagePromptList = sections?.imagePrompts
     ? sections.imagePrompts
+        .split(/\n(?=\d+\.|\d+\)|Scene)/)
+        .filter((item) => item.trim() !== "")
+    : [];
+
+  const videoPromptList = sections?.videoPrompts
+    ? sections.videoPrompts
         .split(/\n(?=\d+\.|\d+\)|Scene)/)
         .filter((item) => item.trim() !== "")
     : [];
@@ -37,6 +50,31 @@ function Workspace({
         [selectedScene]: imageUrl,
       });
     }
+  }
+
+  async function handleImproveImagePrompt() {
+    const currentPrompt = imagePromptList[selectedScene];
+
+    if (!currentPrompt) {
+      alert("No image prompt found.");
+      return;
+    }
+
+    const improvedPrompt = await improveImagePrompt(currentPrompt);
+
+    if (!improvedPrompt) {
+      alert("Failed to improve prompt.");
+      return;
+    }
+
+    await onSaveScene({
+      index: selectedScene,
+      scene: sceneList[selectedScene],
+      imagePrompt: improvedPrompt,
+      videoPrompt: videoPromptList[selectedScene],
+    });
+
+    alert("✨ Image prompt improved and saved!");
   }
 
   return (
@@ -72,6 +110,7 @@ function Workspace({
       <AIToolbox
         onGenerateImage={handleGenerateImage}
         hasImage={hasImage}
+        onImproveImagePrompt={handleImproveImagePrompt}
       />
     </div>
   );
