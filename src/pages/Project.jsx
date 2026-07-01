@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { generateProject } from "../services/aiService";
+import { generateImage } from "../services/imageService";
 import { updateProject } from "../services/projectService";
 import ProjectHeader from "../components/workspace/ProjectHeader";
 import Workspace from "../components/workspace/Workspace";
 import BottomTabs from "../components/workspace/BottomTabs";
+import ProductionProgress from "../components/workspace/ProductionProgress";
 
 function getSection(text, start, end) {
   return text.split(start)[1]?.split(end)[0]?.trim();
@@ -33,17 +35,55 @@ function joinList(list) {
   return list.join("\n");
 }
 
+const defaultPipelineSteps = [
+  { label: "Generate AI Director Package", status: "waiting" },
+  { label: "Create Script", status: "waiting" },
+  { label: "Create Scenes", status: "waiting" },
+  { label: "Create Image Prompts", status: "waiting" },
+  { label: "Create Video Prompts", status: "waiting" },
+  { label: "Create Voice Notes", status: "waiting" },
+  { label: "Create Metadata", status: "waiting" },
+  { label: "Generate Scene Images", status: "waiting" },
+];
+
 function Project({ project, goHome }) {
   const [sections, setSections] = useState(project?.sections || null);
   const [sceneImages, setSceneImages] = useState(project?.sceneImages || {});
   const [selectedScene, setSelectedScene] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [fullProductionLoading, setFullProductionLoading] = useState(false);
+  const [pipelineSteps, setPipelineSteps] = useState(defaultPipelineSteps);
+
+  function updatePipeline(index, status) {
+    setPipelineSteps((oldSteps) =>
+      oldSteps.map((step, i) => (i === index ? { ...step, status } : step))
+    );
+  }
 
   async function handleGenerateAIProject() {
     setLoading(true);
 
+    setPipelineSteps([
+      { label: "Generate AI Director Package", status: "loading" },
+      { label: "Create Script", status: "waiting" },
+      { label: "Create Scenes", status: "waiting" },
+      { label: "Create Image Prompts", status: "waiting" },
+      { label: "Create Video Prompts", status: "waiting" },
+      { label: "Create Voice Notes", status: "waiting" },
+      { label: "Create Metadata", status: "waiting" },
+      { label: "Generate Scene Images", status: "waiting" },
+    ]);
+
     const result = await generateProject(project.name, project.idea);
     const splitSections = splitAIResult(result);
+
+    updatePipeline(0, "done");
+    updatePipeline(1, "done");
+    updatePipeline(2, "done");
+    updatePipeline(3, "done");
+    updatePipeline(4, "done");
+    updatePipeline(5, "done");
+    updatePipeline(6, "done");
 
     setSections(splitSections);
     setSelectedScene(0);
@@ -55,6 +95,58 @@ function Project({ project, goHome }) {
     });
 
     setLoading(false);
+  }
+
+  async function handleGenerateEntireProject() {
+    setFullProductionLoading(true);
+
+    setPipelineSteps([
+      { label: "Generate AI Director Package", status: "loading" },
+      { label: "Create Script", status: "waiting" },
+      { label: "Create Scenes", status: "waiting" },
+      { label: "Create Image Prompts", status: "waiting" },
+      { label: "Create Video Prompts", status: "waiting" },
+      { label: "Create Voice Notes", status: "waiting" },
+      { label: "Create Metadata", status: "waiting" },
+      { label: "Generate Scene Images", status: "waiting" },
+    ]);
+
+    const result = await generateProject(project.name, project.idea);
+    const splitSections = splitAIResult(result);
+
+    updatePipeline(0, "done");
+    updatePipeline(1, "done");
+    updatePipeline(2, "done");
+    updatePipeline(3, "done");
+    updatePipeline(4, "done");
+    updatePipeline(5, "done");
+    updatePipeline(6, "done");
+    updatePipeline(7, "loading");
+
+    setSections(splitSections);
+    setSelectedScene(0);
+
+    const imagePrompts = splitList(splitSections.imagePrompts);
+    const generatedImages = {};
+
+    for (let i = 0; i < imagePrompts.length; i++) {
+      const imageUrl = await generateImage(imagePrompts[i]);
+
+      if (imageUrl) {
+        generatedImages[i] = imageUrl;
+        setSceneImages({ ...generatedImages });
+      }
+    }
+
+    updatePipeline(7, "done");
+
+    await updateProject({
+      ...project,
+      sections: splitSections,
+      sceneImages: generatedImages,
+    });
+
+    setFullProductionLoading(false);
   }
 
   async function handleImagesChange(images) {
@@ -153,7 +245,11 @@ ${sections.youtubeMetadata}
         onGenerate={handleGenerateAIProject}
         loading={loading}
         onExport={exportProject}
+        onGenerateEntireProject={handleGenerateEntireProject}
+        fullProductionLoading={fullProductionLoading}
       />
+
+      <ProductionProgress steps={pipelineSteps} />
 
       <Workspace
         sections={sections}
