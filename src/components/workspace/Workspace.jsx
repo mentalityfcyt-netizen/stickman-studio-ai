@@ -1,10 +1,17 @@
+import { useState } from "react";
 import SceneSelector from "../SceneSelector";
 import TimelineStudio from "../TimelineStudio";
 import SceneEditor from "./SceneEditor";
 import SceneCanvas from "./SceneCanvas";
-import AIToolbox from "./AIToolbox";
+import AICopilot from "./AICopilot";
 import { generateImage } from "../../services/imageService";
-import { improveImagePrompt } from "../../services/aiEditService";
+import { rewriteScene } from "../../services/aiEditService";
+
+function splitList(text) {
+  return text
+    ? text.split(/\n(?=\d+\.|\d+\)|Scene)/).filter((item) => item.trim() !== "")
+    : [];
+}
 
 function Workspace({
   sections,
@@ -14,25 +21,11 @@ function Workspace({
   onImagesChange,
   onSaveScene,
 }) {
-  const hasImage = Boolean(sceneImages[selectedScene]);
+  const [copilotLoading, setCopilotLoading] = useState(false);
 
-  const sceneList = sections?.scenes
-    ? sections.scenes
-        .split(/\n(?=\d+\.|\d+\)|Scene)/)
-        .filter((item) => item.trim() !== "")
-    : [];
-
-  const imagePromptList = sections?.imagePrompts
-    ? sections.imagePrompts
-        .split(/\n(?=\d+\.|\d+\)|Scene)/)
-        .filter((item) => item.trim() !== "")
-    : [];
-
-  const videoPromptList = sections?.videoPrompts
-    ? sections.videoPrompts
-        .split(/\n(?=\d+\.|\d+\)|Scene)/)
-        .filter((item) => item.trim() !== "")
-    : [];
+  const sceneList = splitList(sections?.scenes);
+  const imagePromptList = splitList(sections?.imagePrompts);
+  const videoPromptList = splitList(sections?.videoPrompts);
 
   async function handleGenerateImage() {
     const prompt = imagePromptList[selectedScene];
@@ -52,33 +45,35 @@ function Workspace({
     }
   }
 
-  async function handleImproveImagePrompt() {
-    const currentPrompt = imagePromptList[selectedScene];
+  async function handleCopilotSend(message) {
+    const currentScene = sceneList[selectedScene];
 
-    if (!currentPrompt) {
-      alert("No image prompt found.");
+    if (!currentScene) {
+      alert("Generate a project first.");
       return;
     }
 
-    const improvedPrompt = await improveImagePrompt(currentPrompt);
+    setCopilotLoading(true);
 
-    if (!improvedPrompt) {
-      alert("Failed to improve prompt.");
-      return;
-    }
+    const rewritten = await rewriteScene(`
+User request: ${message}
+
+Current scene:
+${currentScene}
+`);
 
     await onSaveScene({
       index: selectedScene,
-      scene: sceneList[selectedScene],
-      imagePrompt: improvedPrompt,
+      scene: rewritten,
+      imagePrompt: imagePromptList[selectedScene],
       videoPrompt: videoPromptList[selectedScene],
     });
 
-    alert("✨ Image prompt improved and saved!");
+    setCopilotLoading(false);
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[220px_1fr_320px]">
+    <div className="grid gap-6 xl:grid-cols-[220px_1fr_360px]">
       <SceneSelector
         scenes={sections?.scenes}
         selectedScene={selectedScene}
@@ -107,11 +102,19 @@ function Workspace({
         />
       </div>
 
-      <AIToolbox
-        onGenerateImage={handleGenerateImage}
-        hasImage={hasImage}
-        onImproveImagePrompt={handleImproveImagePrompt}
-      />
+      <div className="grid gap-6">
+        <button
+          onClick={handleGenerateImage}
+          className="rounded-xl bg-purple-600 px-4 py-3 font-bold text-white hover:bg-purple-500"
+        >
+          🖼 Generate Scene Image
+        </button>
+
+        <AICopilot
+          onSend={handleCopilotSend}
+          loading={copilotLoading}
+        />
+      </div>
     </div>
   );
 }

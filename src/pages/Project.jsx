@@ -2,6 +2,7 @@ import { useState } from "react";
 import { generateProject } from "../services/aiService";
 import { generateImage } from "../services/imageService";
 import { updateProject } from "../services/projectService";
+import { runProductionEngine } from "../services/engine/productionEngine";
 import ProjectHeader from "../components/workspace/ProjectHeader";
 import Workspace from "../components/workspace/Workspace";
 import BottomTabs from "../components/workspace/BottomTabs";
@@ -13,6 +14,8 @@ function getSection(text, start, end) {
 
 function splitAIResult(text) {
   return {
+    videoType: getSection(text, "VIDEO_TYPE:", "PRODUCTION_PLAN:"),
+    productionPlan: getSection(text, "PRODUCTION_PLAN:", "SCRIPT:"),
     script: getSection(text, "SCRIPT:", "SCENES:"),
     scenes: getSection(text, "SCENES:", "IMAGE_PROMPTS:"),
     imagePrompts: getSection(text, "IMAGE_PROMPTS:", "VIDEO_PROMPTS:"),
@@ -36,7 +39,9 @@ function joinList(list) {
 }
 
 const defaultPipelineSteps = [
-  { label: "Generate AI Director Package", status: "waiting" },
+  { label: "Run Production Engine", status: "waiting" },
+  { label: "Analyze Video Type", status: "waiting" },
+  { label: "Create Production Plan", status: "waiting" },
   { label: "Create Script", status: "waiting" },
   { label: "Create Scenes", status: "waiting" },
   { label: "Create Image Prompts", status: "waiting" },
@@ -49,10 +54,20 @@ const defaultPipelineSteps = [
 function Project({ project, goHome }) {
   const [sections, setSections] = useState(project?.sections || null);
   const [sceneImages, setSceneImages] = useState(project?.sceneImages || {});
+  const [sceneVideos, setSceneVideos] = useState(project?.sceneVideos || {});
   const [selectedScene, setSelectedScene] = useState(0);
   const [loading, setLoading] = useState(false);
   const [fullProductionLoading, setFullProductionLoading] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState(defaultPipelineSteps);
+
+  function resetPipeline(firstLoading = false) {
+    setPipelineSteps(
+      defaultPipelineSteps.map((step, index) => ({
+        ...step,
+        status: firstLoading && index === 0 ? "loading" : "waiting",
+      }))
+    );
+  }
 
   function updatePipeline(index, status) {
     setPipelineSteps((oldSteps) =>
@@ -60,38 +75,59 @@ function Project({ project, goHome }) {
     );
   }
 
-  async function handleGenerateAIProject() {
-    setLoading(true);
-
-    setPipelineSteps([
-      { label: "Generate AI Director Package", status: "loading" },
-      { label: "Create Script", status: "waiting" },
-      { label: "Create Scenes", status: "waiting" },
-      { label: "Create Image Prompts", status: "waiting" },
-      { label: "Create Video Prompts", status: "waiting" },
-      { label: "Create Voice Notes", status: "waiting" },
-      { label: "Create Metadata", status: "waiting" },
-      { label: "Generate Scene Images", status: "waiting" },
-    ]);
-
-    const result = await generateProject(project.name, project.idea);
-    const splitSections = splitAIResult(result);
-
-    updatePipeline(0, "done");
+  function markAIPackageDone() {
     updatePipeline(1, "done");
     updatePipeline(2, "done");
     updatePipeline(3, "done");
     updatePipeline(4, "done");
     updatePipeline(5, "done");
     updatePipeline(6, "done");
+    updatePipeline(7, "done");
+    updatePipeline(8, "done");
+  }
 
-    setSections(splitSections);
+  async function generateAIPackage() {
+    updatePipeline(0, "loading");
+
+    const engineResult = await runProductionEngine(project);
+
+    updatePipeline(0, "done");
+    updatePipeline(1, "loading");
+
+    const result = await generateProject(project.name, project.idea, {
+      ...project,
+      producerStrategy: engineResult.producerStrategy,
+    });
+
+    const splitSections = splitAIResult(result);
+
+    markAIPackageDone();
+
+    return {
+      splitSections,
+      engineResult,
+    };
+  }
+
+  async function handleGenerateAIProject() {
+    setLoading(true);
+    resetPipeline(true);
+
+    const { splitSections, engineResult } = await generateAIPackage();
+
+    const updatedSections = {
+      ...splitSections,
+      producerStrategy: engineResult.producerStrategy,
+    };
+
+    setSections(updatedSections);
     setSelectedScene(0);
 
     await updateProject({
       ...project,
-      sections: splitSections,
+      sections: updatedSections,
       sceneImages,
+      sceneVideos,
     });
 
     setLoading(false);
@@ -99,34 +135,21 @@ function Project({ project, goHome }) {
 
   async function handleGenerateEntireProject() {
     setFullProductionLoading(true);
+    resetPipeline(true);
 
-    setPipelineSteps([
-      { label: "Generate AI Director Package", status: "loading" },
-      { label: "Create Script", status: "waiting" },
-      { label: "Create Scenes", status: "waiting" },
-      { label: "Create Image Prompts", status: "waiting" },
-      { label: "Create Video Prompts", status: "waiting" },
-      { label: "Create Voice Notes", status: "waiting" },
-      { label: "Create Metadata", status: "waiting" },
-      { label: "Generate Scene Images", status: "waiting" },
-    ]);
+    const { splitSections, engineResult } = await generateAIPackage();
 
-    const result = await generateProject(project.name, project.idea);
-    const splitSections = splitAIResult(result);
+    const updatedSections = {
+      ...splitSections,
+      producerStrategy: engineResult.producerStrategy,
+    };
 
-    updatePipeline(0, "done");
-    updatePipeline(1, "done");
-    updatePipeline(2, "done");
-    updatePipeline(3, "done");
-    updatePipeline(4, "done");
-    updatePipeline(5, "done");
-    updatePipeline(6, "done");
-    updatePipeline(7, "loading");
+    updatePipeline(9, "loading");
 
-    setSections(splitSections);
+    setSections(updatedSections);
     setSelectedScene(0);
 
-    const imagePrompts = splitList(splitSections.imagePrompts);
+    const imagePrompts = splitList(updatedSections.imagePrompts);
     const generatedImages = {};
 
     for (let i = 0; i < imagePrompts.length; i++) {
@@ -138,12 +161,13 @@ function Project({ project, goHome }) {
       }
     }
 
-    updatePipeline(7, "done");
+    updatePipeline(9, "done");
 
     await updateProject({
       ...project,
-      sections: splitSections,
+      sections: updatedSections,
       sceneImages: generatedImages,
+      sceneVideos,
     });
 
     setFullProductionLoading(false);
@@ -156,6 +180,18 @@ function Project({ project, goHome }) {
       ...project,
       sections,
       sceneImages: images,
+      sceneVideos,
+    });
+  }
+
+  async function handleVideosChange(videos) {
+    setSceneVideos(videos);
+
+    await updateProject({
+      ...project,
+      sections,
+      sceneImages,
+      sceneVideos: videos,
     });
   }
 
@@ -181,6 +217,7 @@ function Project({ project, goHome }) {
       ...project,
       sections: updatedSections,
       sceneImages,
+      sceneVideos,
     });
 
     alert("Scene saved!");
@@ -197,6 +234,15 @@ ${project.name}
 
 IDEA:
 ${project.idea}
+
+PRODUCER STRATEGY:
+${sections.producerStrategy}
+
+VIDEO TYPE:
+${sections.videoType}
+
+PRODUCTION PLAN:
+${sections.productionPlan}
 
 SCRIPT:
 ${sections.script}
@@ -256,7 +302,9 @@ ${sections.youtubeMetadata}
         selectedScene={selectedScene}
         setSelectedScene={setSelectedScene}
         sceneImages={sceneImages}
+        sceneVideos={sceneVideos}
         onImagesChange={handleImagesChange}
+        onVideosChange={handleVideosChange}
         onSaveScene={handleSaveScene}
       />
 

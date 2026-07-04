@@ -8,10 +8,16 @@ function DashboardHeader({ user, onNewProject }) {
           <p className="text-slate-400">Welcome back</p>
 
           <h1 className="mt-1 text-4xl font-bold">
-            🎬 Stickman Studio AI
+            🎬 VidoForge AI
           </h1>
 
-          <p className="mt-3 text-slate-400">
+          <p className="mt-3 max-w-2xl text-slate-400">
+            Create documentaries, realistic videos, animations, Roblox stories,
+            soccer animations, Minecraft videos, educational content, and much
+            more—all powered by AI.
+          </p>
+
+          <p className="mt-4 text-sm text-slate-500">
             Signed in as {user?.email}
           </p>
         </div>
