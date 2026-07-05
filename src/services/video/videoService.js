@@ -1,4 +1,4 @@
-import { generateGeminiVideo } from "./geminiVideoProvider";
+const API = "http://localhost:5001";
 
 export async function generateSceneVideo({
   scene,
@@ -6,8 +6,20 @@ export async function generateSceneVideo({
   videoPrompt,
   imageUrl,
 }) {
-  return generateGeminiVideo({
-    prompt: videoPrompt || imagePrompt || scene,
-    imageUrl,
+  const response = await fetch(`${API}/api/video/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt: videoPrompt || imagePrompt || scene,
+      imageUrl,
+    }),
   });
+
+  if (!response.ok) {
+    throw new Error("Video generation failed.");
+  }
+
+  return response.json();
 }

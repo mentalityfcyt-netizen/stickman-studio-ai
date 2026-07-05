@@ -1,42 +1,23 @@
 import { useEffect, useState } from "react";
+import { Textarea } from "../ui";
 
-function splitList(text) {
-  return text
-    ? text.split(/\n(?=\d+\.|\d+\)|Scene)/).filter((item) => item.trim() !== "")
-    : [];
-}
-
-function SceneEditor({
-  scenes,
-  imagePrompts,
-  videoPrompts,
-  selectedScene,
-  onSaveScene,
-}) {
-  const sceneList = splitList(scenes);
-  const imagePromptList = splitList(imagePrompts);
-  const videoPromptList = splitList(videoPrompts);
-
-  const scene = sceneList[selectedScene] || "";
-  const imagePrompt = imagePromptList[selectedScene] || "";
-  const videoPrompt = videoPromptList[selectedScene] || "";
-
-  const [editedScene, setEditedScene] = useState(scene);
-  const [editedImagePrompt, setEditedImagePrompt] = useState(imagePrompt);
-  const [editedVideoPrompt, setEditedVideoPrompt] = useState(videoPrompt);
+function SceneEditor({ scene, selectedScene, onSaveScene }) {
+  const [editedScene, setEditedScene] = useState("");
+  const [editedImagePrompt, setEditedImagePrompt] = useState("");
+  const [editedVideoPrompt, setEditedVideoPrompt] = useState("");
 
   useEffect(() => {
-    setEditedScene(scene);
-    setEditedImagePrompt(imagePrompt);
-    setEditedVideoPrompt(videoPrompt);
-  }, [scene, imagePrompt, videoPrompt]);
+    setEditedScene(scene?.description || "");
+    setEditedImagePrompt(scene?.imagePrompt || "");
+    setEditedVideoPrompt(scene?.videoPrompt || "");
+  }, [scene]);
 
   function handleSave() {
     onSaveScene({
+      index: selectedScene,
       scene: editedScene,
       imagePrompt: editedImagePrompt,
       videoPrompt: editedVideoPrompt,
-      index: selectedScene,
     });
   }
 
@@ -47,7 +28,9 @@ function SceneEditor({
       </h2>
 
       {!scene && (
-        <p className="text-slate-400">Generate an AI Director Package first.</p>
+        <p className="text-slate-400">
+          Generate an AI package first.
+        </p>
       )}
 
       {scene && (
@@ -56,11 +39,11 @@ function SceneEditor({
             <label className="mb-2 block font-bold text-blue-400">
               📝 Scene Description
             </label>
-            <textarea
+            <Textarea
               value={editedScene}
               onChange={(e) => setEditedScene(e.target.value)}
-              rows="5"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-200 outline-none focus:border-blue-500"
+              rows={5}
+              className="bg-slate-950"
             />
           </div>
 
@@ -68,11 +51,11 @@ function SceneEditor({
             <label className="mb-2 block font-bold text-purple-400">
               🖼 Image Prompt
             </label>
-            <textarea
+            <Textarea
               value={editedImagePrompt}
               onChange={(e) => setEditedImagePrompt(e.target.value)}
-              rows="5"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-200 outline-none focus:border-purple-500"
+              rows={5}
+              className="bg-slate-950"
             />
           </div>
 
@@ -80,11 +63,11 @@ function SceneEditor({
             <label className="mb-2 block font-bold text-emerald-400">
               🎥 Video Prompt
             </label>
-            <textarea
+            <Textarea
               value={editedVideoPrompt}
               onChange={(e) => setEditedVideoPrompt(e.target.value)}
-              rows="5"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-200 outline-none focus:border-emerald-500"
+              rows={5}
+              className="bg-slate-950"
             />
           </div>
 

@@ -6,36 +6,32 @@ import SceneCanvas from "./SceneCanvas";
 import AICopilot from "./AICopilot";
 import { generateImage } from "../../services/imageService";
 import { rewriteScene } from "../../services/aiEditService";
-
-function splitList(text) {
-  return text
-    ? text.split(/\n(?=\d+\.|\d+\)|Scene)/).filter((item) => item.trim() !== "")
-    : [];
-}
+import { generateSceneVideo } from "../../services/video/videoService";
+import { buildSceneObjects } from "../../utils/sceneUtils";
 
 function Workspace({
   sections,
   selectedScene,
   setSelectedScene,
   sceneImages,
+  sceneVideos,
   onImagesChange,
+  onVideosChange,
   onSaveScene,
 }) {
   const [copilotLoading, setCopilotLoading] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(false);
 
-  const sceneList = splitList(sections?.scenes);
-  const imagePromptList = splitList(sections?.imagePrompts);
-  const videoPromptList = splitList(sections?.videoPrompts);
+  const scenes = buildSceneObjects(sections, sceneImages, sceneVideos);
+  const currentScene = scenes[selectedScene];
 
   async function handleGenerateImage() {
-    const prompt = imagePromptList[selectedScene];
-
-    if (!prompt) {
+    if (!currentScene?.imagePrompt) {
       alert("No image prompt found for this scene.");
       return;
     }
 
-    const imageUrl = await generateImage(prompt);
+    const imageUrl = await generateImage(currentScene.imagePrompt);
 
     if (imageUrl) {
       onImagesChange({
@@ -45,9 +41,41 @@ function Workspace({
     }
   }
 
-  async function handleCopilotSend(message) {
-    const currentScene = sceneList[selectedScene];
+  async function handleGenerateVideo() {
+    if (!currentScene) {
+      alert("Generate a project first.");
+      return;
+    }
 
+    setVideoLoading(true);
+
+    try {
+      const result = await generateSceneVideo({
+        scene: currentScene.description,
+        imagePrompt: currentScene.imagePrompt,
+        videoPrompt: currentScene.videoPrompt,
+        imageUrl: currentScene.imageUrl,
+      });
+
+      if (result.videoUrl) {
+        onVideosChange({
+          ...sceneVideos,
+          [selectedScene]: result.videoUrl,
+        });
+
+        alert("Video generated successfully.");
+      } else {
+        alert(result.message || "Video request finished, but no video URL was returned.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Video generation failed.");
+    }
+
+    setVideoLoading(false);
+  }
+
+  async function handleCopilotSend(message) {
     if (!currentScene) {
       alert("Generate a project first.");
       return;
@@ -59,14 +87,14 @@ function Workspace({
 User request: ${message}
 
 Current scene:
-${currentScene}
+${currentScene.description}
 `);
 
     await onSaveScene({
       index: selectedScene,
       scene: rewritten,
-      imagePrompt: imagePromptList[selectedScene],
-      videoPrompt: videoPromptList[selectedScene],
+      imagePrompt: currentScene.imagePrompt,
+      videoPrompt: currentScene.videoPrompt,
     });
 
     setCopilotLoading(false);
@@ -83,16 +111,15 @@ ${currentScene}
       <div className="grid gap-6">
         <SceneCanvas
           sceneNumber={selectedScene + 1}
-          image={sceneImages[selectedScene]}
+          image={currentScene?.imageUrl}
+          video={currentScene?.videoUrl}
         />
 
         <SceneEditor
-          scenes={sections?.scenes}
-          imagePrompts={sections?.imagePrompts}
-          videoPrompts={sections?.videoPrompts}
-          selectedScene={selectedScene}
-          onSaveScene={onSaveScene}
-        />
+  scene={currentScene}
+  selectedScene={selectedScene}
+  onSaveScene={onSaveScene}
+/>
 
         <TimelineStudio
           scenes={sections?.scenes}
@@ -102,12 +129,19 @@ ${currentScene}
         />
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4">
         <button
           onClick={handleGenerateImage}
           className="rounded-xl bg-purple-600 px-4 py-3 font-bold text-white hover:bg-purple-500"
         >
           🖼 Generate Scene Image
+        </button>
+
+        <button
+          onClick={handleGenerateVideo}
+          className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-500"
+        >
+          {videoLoading ? "Generating Video..." : "🎥 Generate Scene Video"}
         </button>
 
         <AICopilot
